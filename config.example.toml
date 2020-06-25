@@ -1,0 +1,7 @@
+jwt = "replaceme" # Get this from your local storage
+world-id = "ck9nd998pb7m10790hdqhziqe" # Get this from your URL
+imap-domain = "imap.fastmail.com"
+email-username = "your-email-username"
+email-password = "your-email-imap-password"
+aws-bucket-name = "your-bucket-name"
+aws-region = "eu-west-2"
