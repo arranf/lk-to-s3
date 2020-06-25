@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0"
 chrono = "0.4"
-config = "0.10.1"
+kankyo = "0.3"
 imap = {version = "2.1.2", default-features = false}
 rust-s3 = { version = "0.22", git = "https://github.com/arranf/rust-s3", rev = "a7489092c55d9f382d08a2d3f3d1491eaaa8168d", features = ["fail-on-err"] }
 rustls-connector = { version = "0.11.5" }

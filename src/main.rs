@@ -6,7 +6,6 @@ use std::{net::TcpStream, thread, time};
 
 use anyhow::{anyhow, Result};
 use chrono::prelude::*;
-use config::{Config, Environment, File};
 use imap::{types::Uid, Client};
 use rustls_connector::RustlsConnector;
 
@@ -15,16 +14,14 @@ use s3::creds::Credentials;
 use ureq;
 
 mod export_request;
+mod settings;
+
 use crate::export_request::ExportRequest;
+use crate::settings::Settings;
 
 fn main() -> Result<()> {
-    // Get settings from config file, prefer env variables
-    let mut settings = Config::default();
-    settings
-        .merge(File::with_name("config"))
-        .unwrap()
-        .merge(Environment::new())
-        .unwrap();
+    let _ = kankyo::init();
+    let settings = Settings::new()?;
 
     request_export(&settings)?;
     println!("Export requested");
@@ -41,25 +38,27 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn request_export(settings: &Config) -> Result<()> {
+fn request_export(settings: &Settings) -> Result<()> {
     // Request export in JSON
-    ureq::post("https://app.legendkeeper.com/api")
-        .set(
-            "Authorization",
-            &format!(
-                "Bearer {0}",
-                settings.get_str("jwt").expect("Expected JWT to be set")
-            ),
-        )
+    let response = ureq::post("https://app.legendkeeper.com/api")
+        .set("Authorization", &format!("Bearer {0}", settings.jwt))
         .set("Content-Type", "application/json")
         .send_string(&serde_json::to_string(&ExportRequest::new(
-            settings.get("world-id")?,
+            settings.world_id.clone(),
         ))?);
-    Ok(())
+
+    if response.ok() {
+        return Ok(());
+    }
+    Err(anyhow!(format!(
+        "Status Code {} requesting export from LK. {}",
+        response.status(),
+        response.status_text()
+    )))
 }
 
-fn get_export_link(settings: &Config) -> Result<String> {
-    let domain: &str = &settings.get_str("imap-domain")?;
+fn get_export_link(settings: &Settings) -> Result<String> {
+    let domain: &str = &settings.imap_domain;
     let stream = TcpStream::connect((domain.as_ref(), 993))?;
     let tls = RustlsConnector::new_with_native_certs()?;
     let tlsstream = tls.connect(&domain, stream)?;
@@ -69,10 +68,7 @@ fn get_export_link(settings: &Config) -> Result<String> {
     let client = Client::new(tlsstream);
 
     let mut imap_session = client
-        .login(
-            &settings.get_str("email-username")?,
-            &settings.get_str("email-password")?,
-        )
+        .login(&settings.email_username, &settings.email_password)
         .map_err(|e| e.0)?;
 
     // Get most recent LK export emails
@@ -125,10 +121,10 @@ fn get_export_link(settings: &Config) -> Result<String> {
     export_url.ok_or_else(|| anyhow!("Unable to get export URL"))
 }
 
-fn save_to_s3(settings: &Config, url: String) -> Result<()> {
-    let region = settings.get_str("aws-region")?.parse()?;
+fn save_to_s3(settings: &Settings, url: String) -> Result<()> {
+    let region = settings.aws_region.parse()?;
     let credentials = Credentials::default_blocking()?;
-    let bucket = Bucket::new(&settings.get_str("aws-bucket-name")?, region, credentials)?;
+    let bucket = Bucket::new(&settings.aws_bucket_name, region, credentials)?;
 
     let response = ureq::get(&url).call();
     if response.ok() {
