@@ -8,11 +8,11 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0"
-ureq = {version = "1.3" }
+chrono = "0.4"
 config = "0.10.1"
+imap = {version = "2.1.2", default-features = false}
+rust-s3 = { version = "0.22", git = "https://github.com/arranf/rust-s3", rev = "a7489092c55d9f382d08a2d3f3d1491eaaa8168d", features = ["fail-on-err"] }
+rustls-connector = { version = "0.11.5" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-imap = "2.1.2"
-native-tls = "0.2.4"
-rust-s3 = { version = "0.22", features = ["fail-on-err"] }
-chrono = "0.4"
+ureq = {version = "1.3" }

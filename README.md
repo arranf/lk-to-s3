@@ -20,6 +20,5 @@ A Dockerfile exists to run the project on ARM hardware (read: Raspberry Pis).
 
 ## TODO
 
-- [ ] Replace SSL with rustls
 - [ ] Settle on either using reqwest or ureq
 - [ ] Investigate automated JWT fetching

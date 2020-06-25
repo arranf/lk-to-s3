@@ -2,13 +2,13 @@
 #![allow(clippy::module_name_repetitions)]
 
 use std::collections::HashSet;
-use std::{thread, time};
+use std::{net::TcpStream, thread, time};
 
 use anyhow::{anyhow, Result};
 use chrono::prelude::*;
 use config::{Config, Environment, File};
-use imap::{connect, types::Uid};
-use native_tls::TlsConnector;
+use imap::{types::Uid, Client};
+use rustls_connector::RustlsConnector;
 
 use s3::bucket::Bucket;
 use s3::creds::Credentials;
@@ -30,10 +30,14 @@ fn main() -> Result<()> {
     println!("Export requested");
     println!("Waiting for email");
     thread::sleep(time::Duration::from_secs(90));
+
     println!("Getting link from email");
     let export_link = get_export_link(&settings)?;
     println!("Export Link: {}", export_link);
+
     save_to_s3(&settings, export_link.to_owned())?;
+    println!("Stored to S3");
+
     Ok(())
 }
 
@@ -56,11 +60,13 @@ fn request_export(settings: &Config) -> Result<()> {
 
 fn get_export_link(settings: &Config) -> Result<String> {
     let domain: &str = &settings.get_str("imap-domain")?;
-    let tls = TlsConnector::builder().build()?;
+    let stream = TcpStream::connect((domain.as_ref(), 993))?;
+    let tls = RustlsConnector::new_with_native_certs()?;
+    let tlsstream = tls.connect(&domain, stream)?;
 
     // We pass in the domain twice to check that the server's TLS
     // certificate is valid for the domain we're connecting to.
-    let client = connect((domain, 993), domain, &tls)?;
+    let client = Client::new(tlsstream);
 
     let mut imap_session = client
         .login(
@@ -71,13 +77,13 @@ fn get_export_link(settings: &Config) -> Result<String> {
 
     // Get most recent LK export emails
     imap_session.select("INBOX")?;
-    let haystack_uids: HashSet<Uid> =
-        imap_session.uid_search("NEW SUBJECT \"LegendKeeper export\"")?;
 
     let mut most_recent_email_uid: Option<Uid> = None;
     let mut export_url: Option<String> = None;
 
     // Get most recent LK export URL
+    let haystack_uids: HashSet<Uid> =
+        imap_session.uid_search("NEW SUBJECT \"LegendKeeper export\"")?;
     for uid in haystack_uids.iter() {
         let message = imap_session.uid_fetch(uid.to_string(), "RFC822")?;
         let message = message
@@ -89,17 +95,20 @@ fn get_export_link(settings: &Config) -> Result<String> {
             .expect("message was not valid utf-8")
             .to_string();
         if body.contains("export") && body.contains("files.legendkeeper.com") {
+            // Get the URL
             let result: String = body
                 .split(" ")
                 .filter(|a| a.starts_with("https://files"))
                 .take(1)
-                .take(1)
                 .collect();
+            // There's no space at the end of the URL so we have to find the end ourselves
             let end_bytes = result.find(".zip").unwrap_or(result.len());
             let result = result[0..end_bytes + "zip".len() + 1].to_owned();
+
             if !result.is_empty() {
                 most_recent_email_uid = Some(uid.to_owned());
                 export_url = Some(result);
+                // We only need to do this _once_
                 break;
             }
         }
