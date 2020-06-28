@@ -1,0 +1,11 @@
+target
+Dockerfile
+.dockerignore
+.git
+.gitignore
+src
+.env
+.env.example
+scripts
+Cargo.lock
+Cargo.toml
